@@ -1,0 +1,14 @@
+name: Build and deploy to AWS Fargate
+
+on:
+  push:
+    branches:
+      - dev
+      - stage
+      - master
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REPOSITORY: hbt-web
+  ECR_APP_NAME_WEB: hbt-web
