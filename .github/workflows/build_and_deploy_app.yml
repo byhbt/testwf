@@ -5,10 +5,95 @@ on:
     branches:
       - dev
       - stage
-      - master
+      - main
   workflow_dispatch:
 
 env:
   AWS_REGION: us-west-2
   ECR_REPOSITORY: hbt-web
   ECR_APP_NAME_WEB: hbt-web
+
+jobs:
+  build:
+    name: Build Docker image and push it to ECR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ github.ref_name == 'main' && 'production' || github.ref_name == 'stage' && 'staging' || 'dev' }}
+    outputs:
+      web_image: ${{ steps.build-image.outputs.web_image }}
+      ecs_cluster: hbt-web-${{ vars.CURRENT_ENV }}-ecs-cluster
+      ecs_container_name_web: hbt-web-${{ vars.CURRENT_ENV }}-web
+      ecs_service_web: hbt-web-${{ vars.CURRENT_ENV }}-web-ecs-service
+      ecs_task_definition_web: hbt-web-${{ vars.CURRENT_ENV }}-web-service
+      build_version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Expose useful environment variables
+        uses: FranzDiebold/github-env-vars-action@v2
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read package.json
+        id: version
+        uses: actions/github-script@v7
+        env:
+          CURRENT_ENV: ${{ vars.CURRENT_ENV }}
+        with:
+          script: |
+            const packageJson = require('./package.json');
+            const version = packageJson.version;
+            const ciShaShort = process.env.CI_SHA_SHORT || '';
+            const finalVersion = process.env.CURRENT_ENV === 'dev' ? `${version}-${ciShaShort}` : version;
+            core.setOutput('version', finalVersion);
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to AWS ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to AWS ECR
+        id: build-image
+        env:
+          IMAGE_REPOSITORY_PATH: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
+          WEB_IMAGE_NAME: ${{ env.ECR_APP_NAME_WEB }}-${{ env.CI_REF_NAME_SLUG }}-${{ env.CI_SHA_SHORT }}
+          MOBILE_API_IMAGE_NAME: ${{ env.ECR_APP_NAME_MOBILE_API }}-${{ env.CI_REF_NAME_SLUG }}-${{ env.CI_SHA_SHORT }}
+        run: |
+          docker build . \
+            -t $IMAGE_REPOSITORY_PATH:$WEB_IMAGE_NAME \
+            --build-arg NEXT_PUBLIC_ENVIRONMENT=${{ vars.CURRENT_ENV }}
+          docker push -a $IMAGE_REPOSITORY_PATH
+          echo "web_image=$IMAGE_REPOSITORY_PATH:$WEB_IMAGE_NAME" >> $GITHUB_OUTPUT
+
+  deploy_web:
+    needs: build
+    name: Deploy Web to AWS ECS
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ github.ref_name == 'main' && 'production' || github.ref_name == 'stage' && 'staging' || 'dev'}}
+
+    steps:
+      - name: Expose useful environment variables
+        uses: FranzDiebold/github-env-vars-action@v2
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to AWS ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2

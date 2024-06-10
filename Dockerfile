@@ -28,14 +28,14 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV production
 
-#creates a system group named nodejs 
+#creates a system group named nodejs
 RUN addgroup --system --gid 1001 nodejs
 
-#creates a system group named nextjs 
+#creates a system group named nextjs
 RUN adduser --system --uid 1001 nextjs
 
 
-#copy the file from to public folder 
+#copy the file from to public folder
 COPY --from=builder /app/public ./public
 
 RUN mkdir .next
