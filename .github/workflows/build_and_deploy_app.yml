@@ -5,7 +5,8 @@ on:
     branches:
       - dev
       - stage
-      - main
+    tags:
+      - '*'
   workflow_dispatch:
 
 env:
@@ -28,7 +29,7 @@ jobs:
       build_version: ${{ steps.version.outputs.version }}
 
     steps:
-      - name: Expose useful environment variables
+      - name: Expose environment variables
         uses: FranzDiebold/github-env-vars-action@v2
 
       - name: Checkout
