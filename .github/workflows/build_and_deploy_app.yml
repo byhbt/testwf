@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - dev
-      - stage
     tags:
       - '*'
   workflow_dispatch:
@@ -29,9 +28,10 @@ jobs:
       build_version: ${{ steps.version.outputs.version }}
 
     steps:
-      - name: Group of log lines
+      - name: Debug information
         run: |
             echo "::group::My title"
+            echo "${{ github.ref }}"
             echo "${{ github.ref_name }}"
             echo "${{ vars.CURRENT_ENV }}"
             echo "::endgroup::"
